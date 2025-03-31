@@ -1,6 +1,10 @@
 #ifndef SEAD_RUNTIMETYPEINFO_H_
 #define SEAD_RUNTIMETYPEINFO_H_
 
+#if defined (NNSDK)
+#include <cxxabi.h>
+#endif
+
 namespace sead
 {
 namespace RuntimeTypeInfo
@@ -63,19 +67,58 @@ inline DerivedType* DynamicCast(Type* obj)
 
 }  // namespace sead
 
-/// To allow easier use of headers in mods, SEAD_RTTI_STATIC_SOURCE_STATIC_VARIABLE and
-/// SEAD_RTTI_STATIC_SOURCE_CUSTOM allow sourcing RuntimeTypeInfo objects from a variable that can
-/// be linked in, or a custom function. By default, a new instance of the object will be created.
+/// To allow easier use of headers in mods, SEAD_RTTI_STATIC_SOURCE_STATIC_VARIABLE allows
+/// sourcing RuntimeTypeInfo objects from a variable that can be linked in.
+/// By default, a new instance of the object will be created.
 #if defined(SEAD_RTTI_STATIC_SOURCE_STATIC_VARIABLE)
+
+#if defined(NNSDK)
+
+#if (sizeof(void*) == 4)
+#define _SEAD_GETRUNTIMETYPEINFOSTATIC_GUARD_VARIABLE extern const uint32_t cRuntimeTypeInfoStaticGuard
+#elif (sizeof(void*) == 8)
+#define _SEAD_GETRUNTIMETYPEINFOSTATIC_GUARD_VARIABLE extern const uint64_t cRuntimeTypeInfoStaticGuard
+#else
+#error "Unknown platform"
+#endif
+
+#define _SEAD_GETRUNTIMETYPEINFOSTATIC_GUARD                                            \
+private:\
+    _SEAD_GETRUNTIMETYPEINFOSTATIC_GUARD_VARIABLE;\
+    static inline bool lockRuntimeTypeInfoGuard() {\
+        return __cxa_guard_acquire(&cRuntimeTypeInfoStaticGuard);\
+    } \
+    static inline void unlockRuntimeTypeInfoGuard() {\
+        __cxa_guard_release(&cRuntimeTypeInfoStaticGuard);\
+    }\
+    public:\
+#elif defined(cafe)
+#define _SEAD_GETRUNTIMETYPEINFOSTATIC_GUARD                                            \
+private:\
+    extern const int cRuntimeTypeInfoStaticGuard;
+    static inline bool lockRuntimeTypeInfoGuard() {\
+        if (cRuntimeTypeInfoStaticGuard == 0) {\
+            cRuntimeTypeInfoStaticGuard = 1;\
+            return true;\
+        }\
+        return false;\
+    } \
+    static inline void unlockRuntimeTypeInfoGuard() { }\
+    public:\
+#elif defined(ctr)
+#define _SEAD_GETRUNTIMETYPEINFOSTATIC_GUARD                                            \
+    extern const int cRuntimeTypeInfoStaticGuard;
+#else
+#error "Unknown platform"
+#endif
+
 #define _SEAD_GETRUNTIMETYPEINFOSTATIC(TYPE)                                                       \
+    \
     static const TYPE cRuntimeTypeInfoStatic;                                                      \
     static const sead::RuntimeTypeInfo::Interface* getRuntimeTypeInfoStatic()                      \
     {                                                                                              \
         return &cRuntimeTypeInfoStatic;                                                            \
     }
-#elif defined(SEAD_RTTI_STATIC_SOURCE_CUSTOM)
-#define _SEAD_GETRUNTIMETYPEINFOSTATIC(TYPE)                                                       \
-    static const sead::RuntimeTypeInfo::Interface* getRuntimeTypeInfoStatic();
 #else
 #define _SEAD_GETRUNTIMETYPEINFOSTATIC(TYPE)                                                       \
     static const sead::RuntimeTypeInfo::Interface* getRuntimeTypeInfoStatic()                      \
